@@ -1,0 +1,67 @@
+version: "3"
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - '9090:9090'
+    volumes:
+      - './prometheus.yml:/etc/prometheus/prometheus.yml'
+
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    ports:
+      - '8428:8428'
+    volumes:
+      - 'victoriametrics:/victoria-metrics-data'
+    command:
+      -storageDataPath=/victoria-metrics-data
+      -retentionPeriod=30d
+
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    ports:
+      - '9093:9093'
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    ports:
+      - '9100:9100'
+
+  loki:
+    image: grafana/loki:latest
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:2.8.0
+    volumes:
+      - /var/log:/var/log:ro
+    command: -config.file=/etc/promtail/config.yml
+
+  grafana:
+    environment:
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+    volumes:
+      - ./grafana.ini:/etc/grafana/grafana.ini
+      - ./provisioning/:/etc/grafana/provisioning/
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      - '8025:8025'
+
+volumes:
+  victoriametrics:
+    driver: local
+  minio-data:
+    driver: local
