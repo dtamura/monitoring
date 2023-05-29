@@ -5,8 +5,19 @@ services:
     image: prom/prometheus:latest
     ports:
       - '9090:9090'
+    command:
+      - --web.console.templates=/etc/prometheus/consoles
+      - --web.console.libraries=/etc/prometheus/console_libraries
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+      - --web.route-prefix=/
     volumes:
       - './prometheus.yml:/etc/prometheus/prometheus.yml'
+    logging: &logging
+      driver: loki
+      options: 
+        loki-url: http://127.0.0.1:3100/loki/api/v1/push
 
   victoriametrics:
     image: victoriametrics/victoria-metrics:latest
@@ -17,6 +28,7 @@ services:
     command:
       -storageDataPath=/victoria-metrics-data
       -retentionPeriod=30d
+    logging: *logging
 
 
   alertmanager:
@@ -25,23 +37,41 @@ services:
       - '9093:9093'
     volumes:
       - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml
-
-  node-exporter:
-    image: prom/node-exporter:latest
-    ports:
-      - '9100:9100'
+    logging: *logging
 
   loki:
     image: grafana/loki:latest
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki-data:/data/loki
+    logging: *logging
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    expose:
+      - 9100
+    logging: *logging
 
   promtail:
-    image: grafana/promtail:2.8.0
+    image: grafana/promtail:latest
     volumes:
       - /var/log:/var/log:ro
+      - ./promtail-local-config.yaml:/etc/promtail/config.yaml:ro
     command: -config.file=/etc/promtail/config.yml
+    logging: *logging
 
   grafana:
     environment:
@@ -49,19 +79,26 @@ services:
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
     volumes:
+      - grafana-data:/var/lib/grafana
       - ./grafana.ini:/etc/grafana/grafana.ini
       - ./provisioning/:/etc/grafana/provisioning/
     image: grafana/grafana:latest
     ports:
       - "3000:3000"
+    logging: *logging
 
   mailhog:
     image: mailhog/mailhog:v1.0.1
     ports:
       - '8025:8025'
+    logging: *logging
 
 volumes:
   victoriametrics:
     driver: local
   minio-data:
+    driver: local
+  grafana-data:
+    driver: local
+  loki-data:
     driver: local
